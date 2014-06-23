@@ -12,6 +12,7 @@
 #   include "config.h"
 #endif
 
+#if HAVE_NETWORK
 #include "common.h"
 
 #include "../inc/netface.h"      // net interface structures to the engine will use
@@ -154,7 +155,7 @@ main(int argc, char **argv)
   }
 
 
-  unlink(DIN_NAME);    // remove any previous files if they exsists
+  unlink(DIN_NAME);    // remove any previous files if they existss
   unlink(DOUT_NAME);
 
 
@@ -1249,8 +1250,5 @@ void net_watch()
   }
 }
 
-
-
-
-
+#endif // HAVE_NETWORK
 

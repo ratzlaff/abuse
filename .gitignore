@@ -1,19 +1,6 @@
-Makefile.in
-Makefile
-aclocal.m4
-autom4te.cache
-config.h
-config.h.in
-config.log
-config.status
-configure
-libtool
-stamp-*
-*.o
-*.a
-.auto
-.deps
-src/abuse
-src/abuse-tool
-doc/abuse.6
-doc/abuse-tool.6
+# Ignore Mac OS X junk
+.DS_Store
+
+# Ignore various backup files
+*.bak
+*~

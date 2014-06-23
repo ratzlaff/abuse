@@ -12,6 +12,8 @@
 #   include "config.h"
 #endif
 
+#if HAVE_NETWORK
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -90,7 +92,7 @@ int kill_old_driver(int argc, char **argv)
     fclose(fp);
     unlink(DLOCK_NAME);
   }
-  unlink(DIN_NAME);    // remove any previous files if they exsists
+  unlink(DIN_NAME);    // remove any previous files if they existss
   unlink(DOUT_NAME);
   return 1;
 }
@@ -199,7 +201,7 @@ main(int argc, char **argv)
 
     fman->process_net();
   }
-
-
 }
+
+#endif // HAVE_NETWORK
 
