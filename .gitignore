@@ -4,3 +4,10 @@
 # Ignore various backup files
 *.bak
 *~
+
+# Ignore output directory
+bin
+
+# premake generated files
+*.xcodeproj
+*.xcworkspace
