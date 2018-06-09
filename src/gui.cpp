@@ -19,6 +19,8 @@
 #include "dev.h"
 #include "loader2.h"
 
+#include "sound.h"
+
 void ico_button::set_act_id(int id)
 {
   activate_id=id;

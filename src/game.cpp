@@ -33,7 +33,8 @@
 
 #include "common.h"
 
-#include "sdlport/joy.h"
+#include "joy.h"
+#include "sound.h"
 
 #include "dev.h"
 #include "game.h"

@@ -45,6 +45,8 @@
 #include "nfserver.h"
 #include "lisp_gc.h"
 
+#include "sound.h"
+
 level *current_level;
 
 game_object *level::attacker(game_object *who)

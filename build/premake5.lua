@@ -31,7 +31,7 @@ workspace "abuse"
 
 		includedirs { "../src", "../src/imlib", "../src/lisp", "../src/net" }
 		files { "../src/tool/*.cpp", "../src/tool/*.h", "../src/crc.cpp" }
-		links { "lisp", "net", "imlib", "sdlport" }
+		links { "lisp", "net", "imlib", "sdl2port" }
 
 		filter "system:macosx"
 			includedirs { "../osx" }
@@ -45,10 +45,10 @@ workspace "abuse"
 		targetdir "../bin"
 		defines { "HAVE_CONFIG_H", "PACKAGE_NAME=\"abuse\"", "PACKAGE_VERSION=\"0.9\"" }
 
-		includedirs { "../src", "../src/imlib", "../src/lisp", "../src/net" }
+		includedirs { "../src", "../src/imlib", "../src/lisp", "../src/net", "../src/sdl2port" }
 		files { "../src/*.cpp", "../src/*.h", "../src/ui/*.cpp", "../src/ui/*.h", "../src/lol/*.cpp", "../src/lol/*.h" }
 
-		links { "lisp", "net", "imlib", "sdlport", "SDL2", "SDL2_mixer" }
+		links { "lisp", "net", "imlib", "sdl2port", "SDL2", "SDL2_mixer" }
 
 		filter "system:macosx"
 			kind "WindowedApp"
@@ -67,5 +67,5 @@ workspace "abuse"
 	project "imlib"
 		default_sdl_build("imlib")
 
-	project "sdlport"
-		default_sdl_build("sdlport")
+	project "sdl2port"
+		default_sdl_build("sdl2port")

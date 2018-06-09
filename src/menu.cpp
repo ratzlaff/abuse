@@ -39,6 +39,8 @@
 
 #include "net/sock.h"
 
+#include "sound.h"
+
 extern net_protocol *prot;
 
 static VolumeWindow *volume_window;

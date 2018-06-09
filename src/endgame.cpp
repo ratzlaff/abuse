@@ -32,6 +32,8 @@
 #include "director.h"
 #include "lisp_gc.h"
 
+#include "sound.h"
+
 extern palette *old_pal;
 
 struct mask_line

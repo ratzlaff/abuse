@@ -22,7 +22,8 @@
 
 #include "common.h"
 
-#include "sdlport/joy.h"
+#include "joy.h"
+#include "sound.h"
 
 #include "ant.h"
 #include "lisp.h"
