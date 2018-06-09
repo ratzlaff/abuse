@@ -36,6 +36,8 @@
 #include "specache.h"
 #include "netface.h"
 
+#include "sound.h"
+
 #define touch(x) { (x)->last_access=last_access++; \
            if ((x)->last_access<0) { normalize(); (x)->last_access=1; } }
 

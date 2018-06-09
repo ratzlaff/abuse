@@ -22,7 +22,7 @@
 #   include "config.h"
 #endif
 
-#include <SDL.h>
+#include "SDL.h"
 
 #include "common.h"
 
@@ -36,12 +36,17 @@
 #include "setup.h"
 
 extern int get_key_binding(char const *dir, int i);
-extern int mouse_xscale, mouse_yscale;
+extern int mouse_xpad, mouse_ypad, mouse_xscale, mouse_yscale;
 short mouse_buttons[5] = { 0, 0, 0, 0, 0 };
 SDL_GameController *controller;
 
 extern SDL_Window *window;
+extern SDL_Surface *surface;
 extern flags_struct flags;
+
+// From setup.cpp:
+void video_change_settings(void);
+void calculate_mouse_scaling(void);
 
 // Pre-declarations
 void controller_to_mouse( Event &ev, SDL_Event *sdl_event );
@@ -53,11 +58,15 @@ void EventHandler::SysInit()
     controller_enabled = true;
 
     // Ignore activate events (still needed in SDL2?)
+    // This event is gone in SDL2, should we be ignoring the replacement? Dunno
     //SDL_EventState(SDL_ACTIVEEVENT, SDL_IGNORE);
 }
 
 void EventHandler::SysWarpMouse(ivec2 pos)
 {
+    // This should take into account mouse scaling.
+    pos.x = ((pos.x * mouse_xscale + 0x8000) >> 16) + mouse_xpad;
+    pos.y = ((pos.y * mouse_yscale + 0x8000) >> 16) + mouse_ypad;
     SDL_WarpMouseInWindow(window, pos.x, pos.y);
 }
 
@@ -85,7 +94,7 @@ void EventHandler::SysEvent(Event &ev)
     // even if another event has occurred.
     ev.mouse_move.x = m_pos.x;
     ev.mouse_move.y = m_pos.y;
-    //ev.mouse_button = m_button;
+    ev.mouse_button = m_button;
 
     // Gather next event
     SDL_Event sdlev;
@@ -100,62 +109,67 @@ void EventHandler::SysEvent(Event &ev)
     }
     else
     {
-	ev.mouse_button = m_button;
-	
-	// Sort the mouse out
-	int x, y;
-	uint8_t buttons = SDL_GetMouseState(&x, &y);
-	x = Min((x << 16) / mouse_xscale, main_screen->Size().x - 1);
-	y = Min((y << 16) / mouse_yscale, main_screen->Size().y - 1);
-	ev.mouse_move.x = x;
-	ev.mouse_move.y = y;
-	ev.type = EV_MOUSE_MOVE;
-	
-	// Left button
-	if((buttons & SDL_BUTTON(1)) && !mouse_buttons[1])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[1] = !mouse_buttons[1];
-	    ev.mouse_button |= LEFT_BUTTON;
-	}
-	else if(!(buttons & SDL_BUTTON(1)) && mouse_buttons[1])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[1] = !mouse_buttons[1];
-	    ev.mouse_button &= (0xff - LEFT_BUTTON);
-	}
-	
-	// Middle button
-	if((buttons & SDL_BUTTON(2)) && !mouse_buttons[2])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[2] = !mouse_buttons[2];
-	    ev.mouse_button |= LEFT_BUTTON;
-	    ev.mouse_button |= RIGHT_BUTTON;
-	}
-	else if(!(buttons & SDL_BUTTON(2)) && mouse_buttons[2])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[2] = !mouse_buttons[2];
-	    ev.mouse_button &= (0xff - LEFT_BUTTON);
-	    ev.mouse_button &= (0xff - RIGHT_BUTTON);
-	}
-	
-	// Right button
-	if((buttons & SDL_BUTTON(3)) && !mouse_buttons[3])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[3] = !mouse_buttons[3];
-	    ev.mouse_button |= RIGHT_BUTTON;
-	}
-	else if(!(buttons & SDL_BUTTON(3)) && mouse_buttons[3])
-	{
-	    ev.type = EV_MOUSE_BUTTON;
-	    mouse_buttons[3] = !mouse_buttons[3];
-	    ev.mouse_button &= (0xff - RIGHT_BUTTON);
-	}
+    ev.mouse_button = m_button;
+
+    // Sort the mouse out
+    int x, y;
+    uint8_t buttons = SDL_GetMouseState(&x, &y);
+    // Remove any padding SDL may have added
+    x -= mouse_xpad;
+    if (x < 0)
+        x = 0;
+    y -= mouse_ypad;
+    if (y < 0)
+        y = 0;
+    x = Min((x << 16) / mouse_xscale, main_screen->Size().x - 1);
+    y = Min((y << 16) / mouse_yscale, main_screen->Size().y - 1);
+    ev.mouse_move.x = x;
+    ev.mouse_move.y = y;
+    ev.type = EV_MOUSE_MOVE;
+
+    // Left button
+    if((buttons & SDL_BUTTON(1)) && !mouse_buttons[1])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[1] = !mouse_buttons[1];
+        ev.mouse_button |= LEFT_BUTTON;
+    }
+    else if(!(buttons & SDL_BUTTON(1)) && mouse_buttons[1])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[1] = !mouse_buttons[1];
+        ev.mouse_button &= (0xff - LEFT_BUTTON);
     }
 
+    // Middle button
+    if((buttons & SDL_BUTTON(2)) && !mouse_buttons[2])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[2] = !mouse_buttons[2];
+        ev.mouse_button |= LEFT_BUTTON;
+        ev.mouse_button |= RIGHT_BUTTON;
+    }
+    else if(!(buttons & SDL_BUTTON(2)) && mouse_buttons[2])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[2] = !mouse_buttons[2];
+        ev.mouse_button &= (0xff - LEFT_BUTTON);
+        ev.mouse_button &= (0xff - RIGHT_BUTTON);
+    }
+
+    // Right button
+    if((buttons & SDL_BUTTON(3)) && !mouse_buttons[3])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[3] = !mouse_buttons[3];
+        ev.mouse_button |= RIGHT_BUTTON;
+    }
+    else if(!(buttons & SDL_BUTTON(3)) && mouse_buttons[3])
+    {
+        ev.type = EV_MOUSE_BUTTON;
+        mouse_buttons[3] = !mouse_buttons[3];
+        ev.mouse_button &= (0xff - RIGHT_BUTTON);
+    }
     m_pos = ivec2(ev.mouse_move.x, ev.mouse_move.y);
     m_button = ev.mouse_button;
 
@@ -165,7 +179,56 @@ void EventHandler::SysEvent(Event &ev)
     case SDL_QUIT:
         exit(0);
         break;
+    case SDL_WINDOWEVENT:
+        switch (sdlev.window.event)
+        {
+        case SDL_WINDOWEVENT_RESIZED:
+        case SDL_WINDOWEVENT_MAXIMIZED:
+        case SDL_WINDOWEVENT_RESTORED:
+        case SDL_WINDOWEVENT_MINIMIZED:
+            // Recalculate mouse scaling and padding. Note that we may end up
+            // double-doing this, but whatever. Who cares.
+            calculate_mouse_scaling();
+            break;
+        }
+    case SDL_MOUSEWHEEL:
+        if (m_ignore_wheel_events)
+            break;
+        // Conceptually this can be in multiple directions, so use left/right
+        // first because those match the bars on the button
+        if (sdlev.wheel.x < 0)
+        {
+            ev.key = get_key_binding("b4", 0);
+            ev.type = EV_KEY;
+        }
+        else if (sdlev.wheel.x > 0)
+        {
+            ev.key = get_key_binding("b3", 0);
+            ev.type = EV_KEY;
+        }
+        else if (sdlev.wheel.y < 0)
+        {
+            ev.key = get_key_binding("b4", 0);
+            ev.type = EV_KEY;
+        }
+        else if (sdlev.wheel.y > 0)
+        {
+            ev.key = get_key_binding("b3", 0);
+            ev.type = EV_KEY;
+        }
+        if (ev.type == EV_KEY)
+        {
+            // We also need to immediately queue a "release" event or this will
+            // be stuck down forever.
+            Event *release_event = new Event();
+            release_event->key = ev.key;
+            release_event->type = EV_KEYRELEASE;
+            Push(release_event);
+        }
+        break;
     case SDL_MOUSEBUTTONUP:
+        // These were the old mouse wheel handlers, but honestly, using
+        // B4 and B5 for weapon switching works.
         switch(sdlev.button.button)
         {
         case 4:        // Mouse wheel goes up...
@@ -303,40 +366,34 @@ void EventHandler::SysEvent(Event &ev)
         case SDLK_KP_4:         ev.key = JK_LEFT; break;
         case SDLK_KP_6:         ev.key = JK_RIGHT; break;
         case SDLK_F11:
+            // FIXME: This should really be ALT-ENTER
             // Only handle key down
             if(ev.type == EV_KEY)
             {
-		// Toggle fullscreen
-		if(flags.fullscreen)
-		{
-		    flags.fullscreen = 0;
-		    SDL_SetWindowFullscreen(window, 0);
-		    SDL_SetWindowSize(window, flags.xres, flags.yres);
-		}
-		else
-		{
-		    flags.fullscreen = 1;
-		    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		}
+                // Toggle fullscreen
+                flags.fullscreen = !flags.fullscreen;
+                video_change_settings();
             }
             ev.key = EV_SPURIOUS;
             break;
         case SDLK_F12:
+        /* FIXME
             // Only handle key down
             if(ev.type == EV_KEY)
             {
-		// Toggle grab mouse
-		if( SDL_GetWindowGrab(window) == SDL_TRUE )
-		{
-		    the_game->show_help( "Grab Mouse: OFF\n" );
-		    SDL_SetWindowGrab(window, SDL_FALSE);
-		}
-		else
-		{
-		    the_game->show_help( "Grab Mouse: ON\n" );
-		    SDL_SetWindowGrab(window, SDL_TRUE);
-		}
+                // Toggle grab mouse
+                if(SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_ON)
+                {
+                    the_game->show_help("Grab Mouse: OFF\n");
+                    SDL_WM_GrabInput(SDL_GRAB_OFF);
+                }
+                else
+                {
+                    the_game->show_help("Grab Mouse: ON\n");
+                    SDL_WM_GrabInput(SDL_GRAB_ON);
+                }
             }
+            */
             ev.key = EV_SPURIOUS;
             break;
         case SDLK_PRINTSCREEN:    // print-screen key
@@ -344,9 +401,8 @@ void EventHandler::SysEvent(Event &ev)
             if(ev.type == EV_KEY)
             {
                 // Grab a screenshot
-		// need to figure this out for SDL2
-                //SDL_SaveBMP(SDL_GetVideoSurface(), "screenshot.bmp");
-                //the_game->show_help("Screenshot saved to: screenshot.bmp.\n");
+                SDL_SaveBMP(surface, "screenshot.bmp");
+                the_game->show_help("Screenshot saved to: screenshot.bmp.\n");
             }
             ev.key = EV_SPURIOUS;
             break;
@@ -400,6 +456,7 @@ void EventHandler::SysEvent(Event &ev)
             break;
         }
     }
+}
 }
 
 void controller_to_mouse( Event &ev, SDL_Event *sdl_event )

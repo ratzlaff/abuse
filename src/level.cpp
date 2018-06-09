@@ -19,7 +19,9 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
-#include <unistd.h>
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 
 #include "common.h"
 
@@ -42,6 +44,8 @@
 #include "cop.h"
 #include "nfserver.h"
 #include "lisp_gc.h"
+
+#include "sound.h"
 
 level *current_level;
 
@@ -1644,7 +1648,7 @@ void level::write_thumb_nail(bFILE *fp, image *im)
   t=time(NULL);
   char buf[80];
 
-  strftime(buf,80,"%T %A %B %d",localtime(&t));
+  strftime(buf,80,"%H:%M:%S %A %B %d",localtime(&t));
   wm->font()->PutString(i, ivec2(80, 100) + ivec2(-strlen(buf), 2) * wm->font()->Size() / ivec2(2),buf);
 
   fp->write_uint16(i->Size().x);
@@ -2221,7 +2225,7 @@ int level::save(char const *filename, int save_all)
                 }
             }
             delete bk;
-#if (defined(__MACH__) || !defined(__APPLE__))
+#if (defined(__MACH__) || !defined(__APPLE__)) && (!defined(WIN32))
             chmod( bkname, S_IRWXU | S_IRWXG | S_IRWXO );
 #endif
         }
@@ -2316,7 +2320,7 @@ int level::save(char const *filename, int save_all)
             }
 
             delete fp;
-#if (defined(__MACH__) || !defined(__APPLE__))
+#if (defined(__MACH__) || !defined(__APPLE__)) && (!defined(WIN32))
             chmod( name, S_IRWXU | S_IRWXG | S_IRWXO );
 #endif
             write_cache_prof_info();

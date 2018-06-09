@@ -13,11 +13,17 @@
 #endif
 
 #include <string.h>
-#include <unistd.h>
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+#ifdef WIN32
+# include <direct.h>
+#endif
 
 #include "common.h"
 
-#include "sdlport/joy.h"
+#include "joy.h"
+#include "sound.h"
 
 #include "ant.h"
 #include "lisp.h"

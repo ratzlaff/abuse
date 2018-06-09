@@ -22,19 +22,21 @@
 #   include "config.h"
 #endif
 
+#ifdef WIN32
+# include <Windows.h>
+# include <ShlObj.h>
+# include <direct.h>
+# define strcasecmp _stricmp
+#endif
+#ifdef __APPLE__
+# include <CoreFoundation/CoreFoundation.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <SDL.h>
-#ifdef __APPLE__
-#include <Carbon/Carbon.h>
-#include <OpenGL/gl.h>
-#include <OpenGL/glu.h>
-#else
-#include <GL/gl.h>
-#include <GL/glu.h>
-#endif    /* __APPLE__ */
+#include "SDL.h"
 
 #include "specs.h"
 #include "keys.h"
@@ -51,10 +53,10 @@ extern SDL_GameController *controller;
 //
 // Display help
 //
-void showHelp()
+void showHelp(const char* executableName)
 {
     printf( "\n" );
-    printf( "Usage: abuse.sdl [options]\n" );
+    printf( "Usage: %s (sdl2) [options]\n", executableName );
     printf( "Options:\n\n" );
     printf( "** Abuse Options **\n" );
     printf( "  -size <arg>       Set the size of the screen\n" );
@@ -69,6 +71,7 @@ void showHelp()
     printf( "  -fullscreen       Enable fullscreen mode\n" );
     printf( "  -gamepad          Use game controller instead of kbm\n" );
     printf( "  -grabmouse        Grab the mouse to the window\n" );
+    printf( "  -antialias        Enable anti-aliasing\n" );
     printf( "  -h, --help        Display this text\n" );
     printf( "  -mono             Disable stereo sound\n" );
     printf( "  -nosound          Disable sound\n" );
@@ -91,20 +94,22 @@ void createRCFile( char *rcfile )
     {
         fputs( "; Abuse-SDL Configuration file\n\n", fd );
         fputs( "; Startup fullscreen\nfullscreen=0\n\n", fd );
-        #ifndef __APPLE__
+#if !((defined __APPLE__) || (defined WIN32))
         fputs( "; Location of the datafiles\ndatadir=", fd );
         fputs( ASSETDIR "\n\n", fd );
-        #endif
+#endif
         fputs( "; Use mono audio only\nmono=0\n\n", fd );
         fputs( "; Grab the mouse to the window\ngrabmouse=0\n\n", fd );
         fputs( "; Set the scale factor\nscale=2\n\n", fd );
         fputs( "; Don't use game controller\ngamepad=0\n\n", fd );
+        fputs( "; Use anti-aliasing\n; Looks horrible, never enable it\nantialias=0\n\n", fd );
 //        fputs( "; Set the width of the window\nx=320\n\n", fd );
 //        fputs( "; Set the height of the window\ny=200\n\n", fd );
-        fputs( "; Disable the SDL parachute in the case of a crash\nnosdlparachute=0\n\n", fd );
         fputs( "; Key mappings\n", fd );
         fputs( "left=LEFT\nright=RIGHT\nup=UP\ndown=DOWN\n", fd );
         fputs( "fire=SPACE\nweapprev=CTRL_R\nweapnext=INSERT\n", fd );
+        fputs( "; Alternative key bindings\n; Note: only the following keys can have two bindings\n", fd );
+        fputs( "left2=a\nright2=d\nup2=w\ndown2=s\n", fd );
         fclose( fd );
     }
     else
@@ -167,10 +172,13 @@ void readRCFile()
                 result = strtok( NULL, "\n" );
                 flags.gamepad = atoi( result );
             }
-            else if( strcasecmp( result, "nosdlparachute" ) == 0 )
+            else if( strcasecmp( result, "antialias" ) == 0 )
             {
                 result = strtok( NULL, "\n" );
-                flags.nosdlparachute = atoi( result );
+                if( atoi( result ) )
+                {
+                    flags.antialias = 1;
+                }
             }
             else if( strcasecmp( result, "datadir" ) == 0 )
             {
@@ -196,6 +204,26 @@ void readRCFile()
             {
                 result = strtok( NULL,"\n" );
                 keys.down = key_value( result );
+            }
+            else if( strcasecmp( result, "left2" ) == 0 )
+            {
+                result = strtok( NULL,"\n" );
+                keys.left_2 = key_value( result );
+            }
+            else if( strcasecmp( result, "right2" ) == 0 )
+            {
+                result = strtok( NULL,"\n" );
+                keys.right_2 = key_value( result );
+            }
+            else if( strcasecmp( result, "up2" ) == 0 )
+            {
+                result = strtok( NULL,"\n" );
+                keys.up_2 = key_value( result );
+            }
+            else if( strcasecmp( result, "down2" ) == 0 )
+            {
+                result = strtok( NULL,"\n" );
+                keys.down_2 = key_value( result );
             }
             else if( strcasecmp( result, "fire" ) == 0 )
             {
@@ -252,6 +280,7 @@ void parseCommandLine( int argc, char **argv )
         }
         else if( !strcasecmp( argv[ii], "-scale" ) )
         {
+            // FIXME: Pretty sure scale does nothing now
             int result;
             if( sscanf( argv[++ii], "%d", &result ) )
             {
@@ -288,6 +317,10 @@ void parseCommandLine( int argc, char **argv )
         {
             flags.grabmouse = 1;
         }
+        else if( !strcasecmp( argv[ii], "-antialias" ) )
+        {
+            flags.antialias = 1;
+        }
         else if( !strcasecmp( argv[ii], "-mono" ) )
         {
             flags.mono = 1;
@@ -302,8 +335,15 @@ void parseCommandLine( int argc, char **argv )
         }
         else if( !strcasecmp( argv[ii], "-h" ) || !strcasecmp( argv[ii], "--help" ) )
         {
-            showHelp();
+            showHelp(argv[0]);
             exit( 0 );
+        }
+        else if ( !strcasecmp( argv[ii], "-pause" ) )
+        {
+            // Debug command to force a pause here
+            printf("Pausing, press any key to resume (attach debugger now!) . . .");
+            getc(stdin);
+            printf("\n");
         }
     }
 }
@@ -313,30 +353,34 @@ void parseCommandLine( int argc, char **argv )
 //
 void setup( int argc, char **argv )
 {
-    // Initialise default settings
-    flags.fullscreen        = 0;            // Start in a window
-    flags.mono                = 0;            // Enable stereo sound
-    flags.nosound            = 0;            // Enable sound
-    flags.grabmouse            = 0;            // Don't grab the mouse
-    flags.nosdlparachute    = 0;            // SDL error handling
-    flags.xres = xres        = 320;            // Default window width
-    flags.yres = yres        = 200;            // Default window height
-    flags.gamepad              = 0;             // Mouse and keyboard by default
-    keys.up                    = key_value( "UP" );
+    // Initialize default settings
+    flags.fullscreen         = 1;    // Start fullscreen (actually windowed-fullscreen now)
+    flags.mono               = 0;    // Enable stereo sound
+    flags.nosound            = 0;    // Enable sound
+    flags.grabmouse          = 0;    // Don't grab the mouse
+    flags.xres = xres        = 320;  // Default window width
+    flags.yres = yres        = 200;  // Default window height
+    flags.gamepad            = 0;    // Mouse and keyboard by default
+    flags.antialias          = 0;    // Don't anti-alias
+    keys.up                  = key_value( "UP" );
     keys.down                = key_value( "DOWN" );
     keys.left                = key_value( "LEFT" );
-    keys.right                = key_value( "RIGHT" );
-    keys.b3                    = key_value( "CTRL_R" );
-    keys.b4                    = key_value( "INSERT" );
-    scale                    = 2;            // Default scale amount
+    keys.right               = key_value( "RIGHT" );
+    keys.up_2                = key_value( "w" );
+    keys.down_2              = key_value( "s" );
+    keys.left_2              = key_value( "a" );
+    keys.right_2             = key_value( "d" );
+    keys.b3                  = key_value( "CTRL_R" );
+    keys.b4                  = key_value( "INSERT" );
+    scale                    = 2;    // Default scale amount
 
     // Display our name and version
     printf( "%s %s\n", PACKAGE_NAME, PACKAGE_VERSION );
 
     // Initialize SDL with video and audio support
-    if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER ) < 0 )
+    if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER ) < 0 )
     {
-        printf( "Unable to initialise SDL : %s\n", SDL_GetError() );
+        printf( "Unable to initialize SDL : %s\n", SDL_GetError() );
         exit( 1 );
     }
     atexit( SDL_Quit );
@@ -346,6 +390,27 @@ void setup( int argc, char **argv )
     char *savedir;
     FILE *fd = NULL;
 
+#ifdef WIN32
+    // Grab the profile dir
+    PWSTR appData;
+    SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appData);
+    // Create a new chunk of memory to save the savedir in
+    size_t savedir_size = lstrlenW(appData) * 2 + 7;
+    savedir = (char*) malloc(savedir_size);
+    wcstombs(savedir, appData, savedir_size);
+    // Append "\Abuse\" to end end of it
+    strcat(savedir, "\\Abuse\\");
+    // If it doesn't exist, create it
+    if ( (fd = fopen(savedir, "r")) == NULL) {
+        // FIXME: Add some error checking here
+        _mkdir(savedir);
+    } else {
+        fclose( fd );
+    }
+    set_save_filename_prefix(savedir);
+    CoTaskMemFree(appData);
+    free( savedir );
+#else
     if( (homedir = getenv( "HOME" )) != NULL )
     {
         savedir = (char *)malloc( strlen( homedir ) + 9 );
@@ -372,10 +437,11 @@ void setup( int argc, char **argv )
         // Hopefully they have write permissions....
         set_save_filename_prefix( "" );
     }
+#endif
 
     // Set the datadir to a default value
     // (The current directory)
-    #ifdef __APPLE__
+#ifdef __APPLE__
     UInt8 buffer[255];
     CFURLRef bundleurl = CFBundleCopyBundleURL(CFBundleGetMainBundle());
     CFURLRef url = CFURLCreateCopyAppendingPathComponent(kCFAllocatorDefault, bundleurl, CFSTR("Contents/Resources/data"), true);
@@ -385,10 +451,29 @@ void setup( int argc, char **argv )
         exit(1);
     }
     else
+    {
+        printf("Setting prefix to [%s]\n", buffer);
         set_filename_prefix( (const char*)buffer );
-    #else
+    }
+#elif defined WIN32
+    // Under Windows, it makes far more sense to assume the data is stored
+    // relative to our executable than anywhere else.
+    char assetDirName[MAX_PATH];
+    GetModuleFileName(NULL, assetDirName, MAX_PATH);
+    // Find the first \ or / and cut the path there
+    size_t cut_at = -1;
+    for (size_t i = 0; assetDirName[i] != '\0'; i++) {
+        if (assetDirName[i] == '\\' || assetDirName[i] == '/') {
+            cut_at = i;
+        }
+    }
+    if (cut_at >= 0)
+        assetDirName[cut_at] = '\0';
+    printf("Setting data dir to %s\n", assetDirName);
+    set_filename_prefix( assetDirName );
+#else
     set_filename_prefix( ASSETDIR );
-    #endif
+#endif
 
     // Load the users configuration
     readRCFile();
@@ -404,31 +489,22 @@ void setup( int argc, char **argv )
     // try using the first available game controller
     if( flags.gamepad )
     {
-	for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-	    if (SDL_IsGameController(i)) {
-		controller = SDL_GameControllerOpen(i);
-		if (controller) {
-		    printf("Controller: Opened game controller %i: %s\n", i, SDL_GameControllerNameForIndex(i));
-		    break;
-		} else {
-		    printf("Controller: Could not open game controller %i: %s\n", i, SDL_GetError());
-		}
-	    }
-	}
+        for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+            if (SDL_IsGameController(i)) {
+                controller = SDL_GameControllerOpen(i);
+                if (controller) {
+                    printf("Controller: Opened game controller %i: %s\n", i, SDL_GameControllerNameForIndex(i));
+                    break;
+                } else {
+                    printf("Controller: Could not open game controller %i: %s\n", i, SDL_GetError());
+                }
+            }
+        }
     }
 
-    if(controller == NULL)
+    if (controller == NULL)
     {
-	printf("Controller: Using keyboard and mouse\n");
-    }
-    
-    // Stop SDL handling some errors
-    if( flags.nosdlparachute )
-    {
-        // segmentation faults
-        signal( SIGSEGV, SIG_DFL );
-        // floating point errors
-        signal( SIGFPE, SIG_DFL );
+        printf("Controller: Using keyboard and mouse\n");
     }
 }
 
@@ -445,6 +521,14 @@ int get_key_binding(char const *dir, int i)
         return keys.up;
     else if( strcasecmp( dir, "down" ) == 0 )
         return keys.down;
+    else if( strcasecmp( dir, "left2" ) == 0 )
+        return keys.left_2;
+    else if( strcasecmp( dir, "right2" ) == 0 )
+        return keys.right_2;
+    else if( strcasecmp( dir, "up2" ) == 0 )
+        return keys.up_2;
+    else if( strcasecmp( dir, "down2" ) == 0 )
+        return keys.down_2;
     else if( strcasecmp( dir, "b1" ) == 0 )
         return keys.b1;
     else if( strcasecmp( dir, "b2" ) == 0 )

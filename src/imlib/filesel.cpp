@@ -12,7 +12,12 @@
 #   include "config.h"
 #endif
 
-#include <unistd.h>
+#if defined HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+#ifdef WIN32
+# include <direct.h>
+#endif
 
 #include "common.h"
 
@@ -145,8 +150,3 @@ Jwindow *file_dialog(char const *prompt, char const *def,
                 FILENAME_str);
   return j;
 }
-
-
-
-
-

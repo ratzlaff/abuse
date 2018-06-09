@@ -12,18 +12,29 @@
 #   include "config.h"
 #endif
 
+#ifdef WIN32
+# include <WinSock2.h>
+# include <Windows.h>
+// Windows has its own CreateWindow function. It uses preprocessor magic to
+// change between ASCII and wide-character versions, which masks our
+// version of CreateWindow.
+#undef CreateWindow
+#endif
 #include <ctype.h>
 #include <setjmp.h>
-#include <unistd.h>
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 
 #ifdef __APPLE__
 // SDL for OSX needs to override main()
-#   include <SDL.h>
+#   include "SDL.h"
 #endif
 
 #include "common.h"
 
-#include "sdlport/joy.h"
+#include "joy.h"
+#include "sound.h"
 
 #include "dev.h"
 #include "game.h"
@@ -93,10 +104,18 @@ FILE *open_FILE(char const *filename, char const *mode)
 {
     /* FIXME: potential buffer overflow here */
     char tmp_name[200];
+#ifdef WIN32
+    // Need to make sure it's not an absolute Windows path
+    if(get_filename_prefix() && filename[0] != '/' && (filename[0] != '\0' && filename[1] != ':'))
+#else
     if(get_filename_prefix() && filename[0] != '/')
+#endif
+    {
         sprintf(tmp_name, "%s %s", get_filename_prefix(), filename);
+    }
     else
         strcpy(tmp_name, filename);
+    //printf("open_FILE(%s)\n", tmp_name);
     return fopen(tmp_name, mode);
 }
 
@@ -359,6 +378,9 @@ int window_state(int state)
 
 void Game::set_state(int new_state)
 {
+    // If we're no longer in the run state, jump back to virtual mouse state
+    if (new_state != RUN_STATE)
+        wm->SetRightStickMouse();
     int d = 0;
     reset_keymap(); // we think all the keys are up right now
 
@@ -1196,6 +1218,8 @@ void do_title()
         Event ev;
         ev.type = EV_SPURIOUS;
         Timer total;
+        // HACK: Disable wheel for now since it'll trigger skipping the intro
+        wm->SetIgnoreWheelEvents(true);
 
         while (ev.type != EV_KEY && ev.type != EV_MOUSE_BUTTON)
         {
@@ -1221,6 +1245,8 @@ void do_title()
             frame.WaitMs(25.f);
             frame.GetMs();
         }
+        // HACK: And reenable them
+        wm->SetIgnoreWheelEvents(false);
 
         the_game->reset_keymap();
 
@@ -1276,14 +1302,10 @@ Game::Game(int argc, char **argv)
   zoom = 15;
   no_delay = 0;
 
-  if(get_option("-use_joy"))
-  {
-    has_joystick = joy_init(argc, argv);
-    dprintf("Joystick : ");
-    if(has_joystick) dprintf("detected\n");
-    else dprintf("not detected\n");
-  }
-  else has_joystick = 0;
+  has_joystick = joy_init(argc, argv);
+  dprintf("Joystick : ");
+  if(has_joystick) dprintf("detected\n");
+  else dprintf("not detected\n");
 
     // Clean up that old crap
     char *fastpath = (char *)malloc(strlen(get_save_filename_prefix()) + 13);
@@ -1313,7 +1335,7 @@ Game::Game(int argc, char **argv)
 //    load_level(NET_STARTFILE);
   }
 
-  set_mode(19, argc, argv);
+  set_mode(argc, argv);
   if(get_option("-2") && (xres < 639 || yres < 399))
   {
     close_graphics();
@@ -1394,7 +1416,6 @@ Game::Game(int argc, char **argv)
 
   if(dev & EDIT_MODE)
     set_frame_size(0);
-//  do_intro();
   state = START_STATE;         // first set the state to one that has windows
 
 
@@ -1488,11 +1509,6 @@ void Game::update_screen()
     cache.prof_poll_end();
 
   wm->flush_screen();
-
-}
-
-void Game::do_intro()
-{
 
 }
 
@@ -1668,7 +1684,6 @@ void Game::get_input()
                 } break;
                 case INTRO_START_STATE:
                 {
-                    do_intro();
                     if(dev & EDIT_MODE)
                         set_state(RUN_STATE);
                     else
@@ -1889,6 +1904,8 @@ void Game::step()
       if(f->m_focus)
       {
     f->update_scroll();
+    // Center the control here
+    wm->SetRightStickCenter(f->m_focus->x - f->xoff(), f->m_focus->y - f->yoff());
     int w, h;
 
     w = (f->m_bb.x - f->m_aa.x + 1);
@@ -2489,4 +2506,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-

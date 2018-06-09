@@ -55,7 +55,7 @@ game_handler *game_face = NULL;
 extern char lsf[256];
 int local_client_number=0;        // 0 is the server
 join_struct *join_array=NULL;      // points to an array of possible joining clients
-extern char *get_login();
+extern char const *get_login();
 extern void set_login(char const *name);
 
 
@@ -741,4 +741,3 @@ void wait_min_players()
     if (game_face)
         game_face->game_start_wait();
 }
-

@@ -12,7 +12,6 @@
 #define __LOADER_HPP_
 
 #include "lisp/lisp.h"
-#include "sdlport/sound.h"
 
 #include "jwindow.h"
 class property_manager;
@@ -44,6 +43,7 @@ extern uint16_t current_start_type,start_position_type;
 extern int raise_volume,lower_volume,record_button,play_button,music_button,sfx_button;
 
 extern int sfx_volume,music_volume,sound_avail;
+class song;
 extern song *current_song;
 
 /******************************** SCREEN FRAME **********************************/

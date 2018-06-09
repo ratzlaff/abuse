@@ -18,9 +18,20 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <math.h>
-#include <unistd.h>
+#if defined HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifdef WIN32
+# include <io.h>
+#endif
+
+#ifndef O_BINARY
+// Assume we don't have a binary flag on this platform.
+// FIXME: This should probably be done in a less stupid way.
+#define O_BINARY 0
+#endif
 
 #include "common.h"
 
@@ -82,7 +93,7 @@ void set_filename_prefix(char const *prefix)
         int len = strlen( prefix );
         if( prefix[len - 1] != '\\' && prefix[len - 1] != '/')
         {
-            spec_prefix[len] = '/';
+            spec_prefix[len] = PATH_SEPARATOR_CHAR;
             spec_prefix[len + 1] = 0;
         }
     }
@@ -267,11 +278,7 @@ void set_spec_main_file(char const *filename, int Search_order)
   strcpy(spec_main_file,filename);
   search_order=Search_order;
 
-#if (defined(__APPLE__) && !defined(__MACH__))
   spec_main_jfile.open_external(filename,"rb",O_BINARY|O_RDONLY);
-#else
-  spec_main_jfile.open_external(filename,"rb",O_RDONLY);
-#endif
   spec_main_fd = spec_main_jfile.get_fd();
   if (spec_main_fd==-1)
     return;
@@ -291,9 +298,19 @@ void jFILE::open_external(char const *filename, char const *mode, int flags)
 {
   int skip_size=0;
   char tmp_name[200];
+#ifdef WIN32
+  // Need to make sure it's not an absolute Windows path
+  if (spec_prefix && filename[0] != '/' && (filename[0] != '\0' && filename[1] != ':'))
+#else
   if (spec_prefix && filename[0] != '/')
+#endif
+  {
     sprintf(tmp_name,"%s%s",spec_prefix,filename);
-  else strcpy(tmp_name,filename);
+  }
+  else
+  {
+    strcpy(tmp_name,filename);
+  }
 
 //  int old_mask=umask(S_IRWXU | S_IRWXG | S_IRWXO);
   if (flags&O_WRONLY)
@@ -306,10 +323,18 @@ void jFILE::open_external(char const *filename, char const *mode, int flags)
 
     flags-=O_WRONLY;
     flags|=O_CREAT|O_RDWR;
-
+#ifdef WIN32
+    //printf("Open %s flags %x\n", tmp_name, flags);
+    fd=open(tmp_name,flags,_S_IREAD | _S_IWRITE);
+#else
     fd=open(tmp_name,flags,S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-  } else
-    fd=open(tmp_name,flags);
+#endif
+  }
+  else
+  {
+    //printf("Open %s flags %x\n", tmp_name, flags);
+    fd = open(tmp_name, flags);
+  }
 
 //  umask(old_mask);
   if (fd>=0 && !skip_size)
@@ -355,9 +380,18 @@ bFILE *open_file(char const *filename, char const *mode)
   if (!verify_file_fun || verify_file_fun(filename,mode))
   {
     if (open_file_fun)
+    {
       return open_file_fun(filename,mode);
-    else return new jFILE(filename,mode);
-  } else return new null_file;
+    }
+    else
+    {
+      return new jFILE(filename,mode);
+    }
+  }
+  else
+  {
+    return new null_file;
+  }
 }
 
 void jFILE::open_internal(char const *filename, char const *mode, int flags)
@@ -407,8 +441,15 @@ jFILE::jFILE(char const *filename, char const *access_string)      // same as fo
     }
 
   for (s=access_string; *s; s++)
+  {
     if (toupper(*s)=='A')
       access|=O_APPEND|O_WRONLY;
+#ifdef WIN32
+    // Also check for 'b' - doesn't exist on other platforms
+    if (toupper(*s)=='B')
+      access|=O_BINARY;
+#endif
+  }
 
   file_length=start_offset=-1;
   current_offset = 0;
@@ -924,4 +965,3 @@ void list_open_fds()
 {
     printf("Total open file descriptors: %d\n", total_files_open);
 }
-

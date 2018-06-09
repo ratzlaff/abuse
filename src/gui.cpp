@@ -19,6 +19,8 @@
 #include "dev.h"
 #include "loader2.h"
 
+#include "sound.h"
+
 void ico_button::set_act_id(int id)
 {
   activate_id=id;
@@ -115,7 +117,7 @@ void ico_button::draw(int active, image *screen)
     }
 }
 
-extern long S_BUTTON_PRESS_SND;
+extern int32_t S_BUTTON_PRESS_SND;
 extern int sfx_volume;
 
 void ico_button::handle_event(Event &ev, image *screen, InputManager *im)

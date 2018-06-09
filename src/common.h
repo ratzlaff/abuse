@@ -17,6 +17,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef _MSC_VER
+// For simplicity sake, just make snprintf sprintf_s even though they aren't quite the same
+#define snprintf	sprintf_s
+#endif
+
+#ifdef WIN32
+# define PATH_SEPARATOR	"\\"
+# define PATH_SEPARATOR_CHAR	'\\'
+#else
+# define PATH_SEPARATOR	"/"
+# define PATH_SEPARATOR_CHAR	'/'
+#endif
+
 //
 // Lol Engine
 //
@@ -65,7 +78,12 @@ static inline uint32_t lltl(uint32_t x)
     return x;
 }
 
-#define ERROR(x, st) { if (!(x)) \
+#ifdef _WINDOWS_
+// Windows defines its own ERROR macro for use with GDI. We don't care.
+#undef ERROR
+#endif
+
+#define ERROR(x,st) { if (!(x)) \
    { printf("Error on line %d of %s : %s\n", \
      __LINE__, __FILE__, st); exit(1); } }
 

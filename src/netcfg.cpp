@@ -26,7 +26,7 @@
 
 #include "net/sock.h"
 
-extern char *get_login();
+extern char const *get_login();
 net_configuration *main_net_cfg = NULL;
 extern char lsf[256];
 

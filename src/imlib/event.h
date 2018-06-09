@@ -10,15 +10,19 @@
 
 #ifndef __EVENT_HPP_
 #define __EVENT_HPP_
+
+/* Q: Why are these powers of 2? They're never ORed together... */
 #define EV_MOUSE_MOVE     1
 #define EV_MOUSE_BUTTON   2
 #define EV_KEY            4
-#define EV_KEY_SPECIAL    8
-/* #define EV_REDRAW        16 UNUSED */
+/*#define EV_KEY_SPECIAL    8 UNUSED
+ #define EV_REDRAW        16 UNUSED */
 #define EV_SPURIOUS      32
+/* RESIZE is effectively unused (it can never be generated) */
 #define EV_RESIZE        64
 #define EV_KEYRELEASE   128
 #define EV_CLOSE_WINDOW 256
+/* DRAG_WINDOW is effectively unused (it CAN be generated, but is never processed) */
 #define EV_DRAG_WINDOW  512
 #define EV_MESSAGE     1024
 
@@ -74,9 +78,9 @@ public:
 
     int IsPending();
     void Get(Event &ev);
-  void flush_screen();
+    void flush_screen();
 
-  int has_mouse() { return 1; }
+    int has_mouse() { return 1; }
     void SetMouseShape(image *im, ivec2 center)
     {
         m_sprite->SetVisual(im, 1);
@@ -88,18 +92,43 @@ public:
                       Min(Max(pos.y, 0), m_screen->Size().y - 1));
         SysWarpMouse(m_pos);
     }
-
-  // To enable/disable game controller
-  // enables switching between mouse and gamepad when entering certain screens
-  // Added for SDL2 game controller support
-  void enable_controller(bool enabled)
-  {
-      controller_enabled = enabled;
-  }
+    // To enable/disable game controller
+    // enables switching between mouse and gamepad when entering certain screens
+    // Added for SDL2 game controller support
+    void enable_controller(bool enabled)
+    {
+        controller_enabled = enabled;
+    }
+    void SetIgnoreWheelEvents(bool ignore)
+    {
+        m_ignore_wheel_events = ignore;
+    }
+    void SetRightStickCenter(int x, int y)
+    {
+        m_right_stick_x = x;
+        m_right_stick_y = y;
+    }
+    void SetRightStickMouse()
+    {
+        m_right_stick_x = m_right_stick_y = -1;
+    }
 
 private:
     linked_list m_events;
     int m_pending, last_key;
+    bool m_ignore_wheel_events;
+    // "Dead zone" before motion of a stick "counts".
+    // Maximum stick values are 0x7FFF, currently I've
+    // arbitrarily set this to 1/4th.
+    int m_dead_zone = 0x2000;
+    // Scale amount for the right stick when moving the mouse. The range is
+    // -0x7FFF to 0x7FFF, or -32767 to 32767. The default means it will move
+    // a maximum of 3 pixels per tick.
+    int m_right_stick_scale = 0x2000;
+    // Scale amount for the right stick when it's player-locked.
+    // 0x400 gives a range of -31 to 31.
+    int m_right_stick_player_scale = 0x400;
+    int m_right_stick_x, m_right_stick_y;
 
     image *m_screen;
     bool controller_enabled;
@@ -112,4 +141,3 @@ protected:
 };
 
 #endif
-

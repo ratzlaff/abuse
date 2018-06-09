@@ -22,10 +22,13 @@
 #   include "config.h"
 #endif
 
+#ifdef WIN32
+# include <Windows.h>
+#endif
 #include <cstring>
 
-#include <SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include "SDL.h"
+#include "SDL_mixer.h"
 
 #include "sound.h"
 #include "hmi.h"
@@ -43,7 +46,6 @@ static SDL_AudioSpec audioObtained;
 int sound_init( int argc, char **argv )
 {
     char *sfxdir, *datadir;
-    FILE *fd = NULL;
 
     // Disable sound if requested.
     if( flags.nosound )
@@ -56,16 +58,26 @@ int sound_init( int argc, char **argv )
     // Check for the sfx directory, disable sound if we can't find it.
     datadir = get_filename_prefix();
     sfxdir = (char *)malloc( strlen( datadir ) + 5 + 1 );
-    sprintf( sfxdir, "%s/sfx/", datadir );
+    sprintf( sfxdir, "%ssfx", datadir );
+#ifdef WIN32
+    // Attempting to fopen a directory under Windows will fail, and
+    // opendir does not exist. Use GetFileAttributes instead.
+    if( GetFileAttributes( sfxdir ) == INVALID_FILE_ATTRIBUTES )
+#else
+    FILE *fd = NULL;
     if( (fd = fopen( sfxdir,"r" )) == NULL )
+#endif
     {
         // Didn't find the directory, so disable sound.
-        printf( "Sound: Disabled (couldn't find the sfx directory)\n" );
+        printf( "Sound: Disabled (couldn't find the sfx directory %s)\n", sfxdir );
         return 0;
     }
+#ifndef WIN32
+    fclose(fd);
+#endif
     free( sfxdir );
 
-    if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 128) < 0)
+    if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 1024) < 0)
     {
         printf( "Sound: Unable to open audio - %s\nSound: Disabled (error)\n", SDL_GetError() );
         return 0;
@@ -189,10 +201,10 @@ song::song(char const * filename)
     }
 
     rw = SDL_RWFromMem(data, data_size);
-    if(!rw)
+    if (!rw)
     {
-	printf("Sound: ERROR - could not create RWops\n", realname);
-	return;
+	    printf("Sound: ERROR - could not create RWops\n", realname);
+	    return;
     }
 
     music = Mix_LoadMUS_RW(rw, 0);

@@ -1,3 +1,19 @@
+# TODO
+
+## Xenoveritas TODO
+
+- [ ] Add joystick/gamepad support
+- [ ] Find any dead code and remove it
+- [ ] Rewrite event handling to allow multiple keybindings for the same actions
+- [ ] Update configuration system to deal with joysticks/gamepads
+- [ ] Strongly considering replacing the jFILE/bFILE stuff with SDL's SDL_RW API
+
+## Original TODO
+
+- [ ] Go through the old stuff below and figure out what's even still relevent:
+
+----
+
 This is a list of known bugs and features that need fixing/implementing:
 
 FEATURES
@@ -10,7 +26,7 @@ FEATURES
 
 SAM'S TODO
 ----------
- - replace write_PCX calls with SDL_WriteSurfaceBMP
+ - replace `write_PCX` calls with `SDL_WriteSurfaceBMP`
 
 ABUSE-TOOL
 ----------

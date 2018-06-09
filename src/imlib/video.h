@@ -25,7 +25,7 @@ extern int xres,yres;
 extern int xoff,yoff;
 extern image *main_screen;
 
-void set_mode(int mode, int argc=0, char **argv=NULL);
+void set_mode(int argc=0, char **argv=NULL);
 void close_graphics();
 void update_window_done();
 

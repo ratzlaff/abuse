@@ -26,7 +26,7 @@
 #   include <sys/timer.h>
 #   include <sys/time_util.h>
 #else
-#   include <SDL.h>
+#   include "SDL.h"
 #endif
 
 #include "common.h"
@@ -110,7 +110,7 @@ private:
 #elif defined _WIN32
         LARGE_INTEGER tmp;
         QueryPerformanceFrequency(&tmp);
-        return = 1e3f / tmp.QuadPart;
+        return 1e3f / tmp.QuadPart;
 #elif defined __CELLOS_LV2__
         return 1e3f / sys_time_get_timebase_frequency();
 #else
@@ -159,4 +159,3 @@ void Timer::WaitMs(float deltams)
 }
 
 } /* namespace lol */
-

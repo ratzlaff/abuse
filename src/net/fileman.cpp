@@ -17,10 +17,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <unistd.h>
+#if defined HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 #include <string.h>
 #include <signal.h>
 #include <sys/stat.h>
+#ifdef WIN32
+# include <io.h>
+#endif
 
 #include "common.h"
 
@@ -30,6 +35,9 @@
 #include "specache.h"
 
 extern net_protocol *prot;
+
+// FIXME: Where is this supposed to be coming from?
+typedef unsigned short ushort;
 
 
 file_manager *fman=NULL;
@@ -248,7 +256,11 @@ void file_manager::add_nfs_client(net_socket *sock)
     mp++;
   }
 
+#ifdef WIN32
+  int f=open(filename,flags,_S_IREAD | _S_IWRITE);
+#else
   int f=open(filename,flags,S_IRWXU | S_IRWXG | S_IRWXO);
+#endif
 
   FILE *fp=fopen("open.log","ab");
   fprintf(fp,"open file %s, fd=%d\n",filename,f);
@@ -402,7 +414,7 @@ int file_manager::rf_open_file(char const *&filename, char const *mode)
     fs_server_addr=prot->get_node_address(filename,DEFAULT_COMM_PORT,0);
     if (!fs_server_addr)
     {
-      printf("couldn not get address for %s\n",filename);
+      printf("could not get address for %s\n",filename);
       return -1;
     }
   } else if (default_fs)
@@ -440,17 +452,42 @@ int file_manager::rf_open_file(char const *&filename, char const *mode)
   int flags=0;
   while (*mode)
   {
-    if (*mode=='w') flags|=O_CREAT|O_RDWR;
-    else if (*mode=='r') flags|=O_RDONLY;
+    if (*mode=='w')
+    {
+      flags|=O_CREAT|O_RDWR;
+    }
+    else if (*mode=='r')
+    {
+      flags|=O_RDONLY;
+    }
+#ifdef WIN32
+    else if (*mode=='b')
+    {
+      flags|=O_BINARY;
+    }
+#endif
     mode++;
   }
 
   char tmp_name[200];
+#ifdef WIN32
+  if (get_filename_prefix() && filename[0] != '/' && (filename[0] != '\0' && filename[1] != ':'))
+#else
   if (get_filename_prefix() && filename[0] != '/')
+#endif
+  {
     sprintf(tmp_name,"%s%s",get_filename_prefix(),filename);
-  else strcpy(tmp_name,filename);
+  }
+  else
+  {
+    strcpy(tmp_name,filename);
+  }
 
+#ifdef WIN32
+  int f = open(tmp_name, flags, S_IREAD|S_IWRITE);
+#else
   int f=open(tmp_name,flags,S_IRWXU | S_IRWXG | S_IRWXO);
+#endif
   if (f>=0)
   { close(f);
     return -2;

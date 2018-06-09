@@ -22,7 +22,7 @@
 #   include "config.h"
 #endif
 
-#include <SDL.h>
+#include "SDL.h"
 
 #include "common.h"
 
@@ -34,66 +34,61 @@
 SDL_Window *window = NULL;
 SDL_Renderer *renderer = NULL;
 SDL_Surface *surface = NULL;
-SDL_Surface *rgba_surface = NULL;
+SDL_Surface *screen = NULL;
 SDL_Texture *texture = NULL;
 image *main_screen = NULL;
-int win_xscale, win_yscale, mouse_xscale, mouse_yscale;
+int mouse_xpad, mouse_ypad, mouse_xscale, mouse_yscale;
 int xres, yres;
 
 extern palette *lastl;
 extern flags_struct flags;
 
-static void update_window_part(SDL_Rect *rect);
-
-//
-// power_of_two()
-// Get the nearest power of two
-//
-static int power_of_two(int input)
-{
-    int value;
-    for(value = 1 ; value < input ; value <<= 1);
-    return value;
-}
+void calculate_mouse_scaling();
 
 //
 // set_mode()
 // Set the video mode
 //
-void set_mode(int mode, int argc, char **argv)
+void set_mode(int argc, char **argv)
 {
-    // Calculate the window scale
-    win_xscale = mouse_xscale = (flags.xres << 16) / xres;
-    win_yscale = mouse_yscale = (flags.yres << 16) / yres;
+    int win_width = xres;
+    int win_height = yres;
+    if (win_width < 640)
+        win_width *= 2;
+    if (win_height < 400)
+        win_height *= 2;
+    if (xres == 320 && yres == 200)
+    {
+        // Correct for the weird 320x200 aspect ratio
+        win_width = 640;
+        win_height = 480;
+    }
 
-    // force no scaling, let the hw do it
-    win_xscale = win_yscale = 1 << 16;
-
-    // Set the icon for this window.  Looks nice on taskbars etc.
+    // FIXME: Set the icon for this window.  Looks nice on taskbars etc.
     //SDL_WM_SetIcon(SDL_LoadBMP("abuse.bmp"), NULL);
 
     window = SDL_CreateWindow("Abuse",
-			      SDL_WINDOWPOS_UNDEFINED,
-			      SDL_WINDOWPOS_UNDEFINED,
-			      flags.xres, flags.yres,
-			      (flags.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
-
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        win_width, win_height,
+        flags.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
     if(window == NULL)
     {
         printf("Video : Unable to create window: %s\n", SDL_GetError());
         exit(1);
     }
-    
     renderer = SDL_CreateRenderer(window, -1, 0);
-    
-    if(renderer == NULL)
+    if (renderer == NULL)
     {
         printf("Video : Unable to create renderer: %s\n", SDL_GetError());
         exit(1);
     }
-
-    // This will make sure that the aspect ratio is maintained in fullscreen mode
-    SDL_RenderSetLogicalSize(renderer, flags.xres, flags.yres);
+    if (xres == 320 && yres == 200) {
+        // Lie. This fixes the aspect ratio for us.
+        SDL_RenderSetLogicalSize(renderer, 320, 240);
+    } else {
+        SDL_RenderSetLogicalSize(renderer, xres, yres);
+    }
 
     // Create the screen image
     main_screen = new image(ivec2(xres, yres), NULL, 2);
@@ -105,46 +100,37 @@ void set_mode(int mode, int argc, char **argv)
     }
     main_screen->clear();
 
-    int w, h;
-    
-    // texture width/height should be power of 2
-    // FIXME: we can use GL_ARB_texture_non_power_of_two or
-    // GL_ARB_texture_rectangle to avoid the extra memory allocation
-    //w = power_of_two(xres);
-    //h = power_of_two(yres);
-    w = xres;
-    h = yres;
-
-    // create texture surface
-    texture = SDL_CreateTexture(renderer,
-				SDL_PIXELFORMAT_ARGB8888,
-				SDL_TEXTUREACCESS_STREAMING,
-				w, h);
+    // Set up the mouse
+    calculate_mouse_scaling();
 
     // Create our 8-bit surface
     surface = SDL_CreateRGBSurface(0, xres, yres, 8, 0, 0, 0, 0);
     if(surface == NULL)
     {
-        // Our surface is no good, we have to bail.
-        printf("Video : Unable to create 8-bit surface.\n");
+        printf("Video : Unable to create 8-bit surface: %s", SDL_GetError());
+        exit(1);
+    }
+    // Create our surface for the OpenGL texture
+    screen = SDL_CreateRGBSurface(0, xres, yres, 32, 0, 0, 0, 0);
+    if (screen == NULL)
+    {
+        printf("Video : Unable to create 32-bit surface: %s", SDL_GetError());
+        exit(1);
+    }
+    // And create our OpenGL texture
+    texture = SDL_CreateTexture(renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        xres, yres);
+    if (texture == NULL)
+    {
+        printf("Video : Unable to create texture: %s", SDL_GetError());
         exit(1);
     }
 
-    // Create our RGBA surface    
-    int bpp;
-    Uint32 rmask, gmask, bmask, amask;
-    SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_ARGB8888, &bpp, &rmask, &gmask, &bmask, &amask);
-    
-    rgba_surface = SDL_CreateRGBSurface(0, xres, yres, bpp, rmask, gmask, bmask, amask);
-    if(rgba_surface == NULL)
-    {
-        // Our surface is no good, we have to bail.
-        printf("Video : Unable to create RGBA surface.\n");
-        exit(1);
-    }
-    
-    //printf("Video : %dx%d %dbpp\n", window->w, window->h, window->format->BitsPerPixel);
-    printf("Video : %dx%d %dbpp\n", flags.xres, flags.yres, bpp);
+    SDL_DisplayMode mode;
+    SDL_GetWindowDisplayMode(window, &mode);
+    printf("Video : %dx%d %dbpp\n", mode.w, mode.h, SDL_BITSPERPIXEL(mode.format));
 
     // Grab and hide the mouse cursor
     SDL_ShowCursor(0);
@@ -152,6 +138,33 @@ void set_mode(int mode, int argc, char **argv)
 	SDL_SetWindowGrab(window, SDL_TRUE);
 
     update_dirty(main_screen);
+}
+
+void video_change_settings(void)
+{
+    SDL_SetWindowFullscreen(window,
+        flags.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    calculate_mouse_scaling();
+}
+
+void calculate_mouse_scaling()
+{
+    // We need to determine the appropriate mouse scaling.
+    SDL_Rect viewport;
+    float scale_x, scale_y;
+    int width, height;
+
+    // Grab the viewport and how it's scaled...
+    SDL_RenderGetViewport(renderer, &viewport);
+    SDL_RenderGetScale(renderer, &scale_x, &scale_y);
+    width = (int)(viewport.w * scale_x);
+    height = (int)(viewport.h * scale_y);
+    // Re-calculate the mouse scaling
+    mouse_xscale = (width << 16) / xres;
+    mouse_yscale = (height << 16) / yres;
+    // And calculate the padding
+    mouse_xpad = viewport.x * scale_x;
+    mouse_ypad = viewport.y * scale_y;
 }
 
 //
@@ -164,15 +177,12 @@ void close_graphics()
         delete lastl;
     lastl = NULL;
     // Free our 8-bit surface
-    if(surface) 
+    if(surface)
         SDL_FreeSurface(surface);
-
-    if(rgba_surface) 
-        SDL_FreeSurface(rgba_surface);
-
+    if (screen)
+        SDL_FreeSurface(screen);
     if (texture)
         SDL_DestroyTexture(texture);
-
     delete main_screen;
 }
 
@@ -222,10 +232,10 @@ void put_part_image(image *im, int x, int y, int x1, int y1, int x2, int y2)
     // Scale the image onto the surface
     srcrect.w = xe - srcrect.x;
     srcrect.h = ye - srcrect.y;
-    dstrect.x = ((x * win_xscale) >> 16);
-    dstrect.y = ((y * win_yscale) >> 16);
-    dstrect.w = ((srcrect.w * win_xscale) >> 16);
-    dstrect.h = ((srcrect.h * win_yscale) >> 16);
+    dstrect.x = x;
+    dstrect.y = y;
+    dstrect.w = srcrect.w;
+    dstrect.h = srcrect.h;
 
     xstep = (srcrect.w << 16) / dstrect.w;
     ystep = (srcrect.h << 16) / dstrect.h;
@@ -241,49 +251,18 @@ void put_part_image(image *im, int x, int y, int x1, int y1, int x2, int y2)
     dpixel += (dstrect.x + ((dstrect.y) * surface->w)) * surface->format->BytesPerPixel;
 
     // Update surface part
-    if ((win_xscale==1<<16) && (win_yscale==1<<16)) // no scaling or hw scaling
+    srcy = srcrect.y;
+    dpixel = ((Uint8 *)surface->pixels) + y * surface->w + x ;
+    for(ii=0 ; ii < srcrect.h; ii++)
     {
-        srcy = srcrect.y;
-        dpixel = ((Uint8 *)surface->pixels) + y * surface->w + x ;
-        for(ii=0 ; ii < srcrect.h; ii++)
-        {
-            memcpy(dpixel, im->scan_line(srcy) + srcrect.x , srcrect.w);
-            dpixel += surface->w;
-            srcy ++;
-        }
-    }
-    else    // sw scaling
-    {
-        xstep = (srcrect.w << 16) / dstrect.w;
-        ystep = (srcrect.h << 16) / dstrect.h;
-
-        srcy = ((srcrect.y) << 16);
-        dinset = ((surface->w - dstrect.w)) * surface->format->BytesPerPixel;
-
-        dpixel = (Uint8 *)surface->pixels + (dstrect.x + ((dstrect.y) * surface->w)) * surface->format->BytesPerPixel;
-
-        for(ii = 0; ii < dstrect.h; ii++)
-        {
-            srcx = (srcrect.x << 16);
-            for(jj = 0; jj < dstrect.w; jj++)
-            {
-                memcpy(dpixel, im->scan_line((srcy >> 16)) + ((srcx >> 16) * surface->format->BytesPerPixel), surface->format->BytesPerPixel);
-                dpixel += surface->format->BytesPerPixel;
-                srcx += xstep;
-            }
-            dpixel += dinset;
-            srcy += ystep;
-        }
-//        dpixel += dinset;
-//        srcy += ystep;
+        memcpy(dpixel, im->scan_line(srcy) + srcrect.x , srcrect.w);
+        dpixel += surface->w;
+        srcy ++;
     }
 
     // Unlock the surface if we locked it.
     if(SDL_MUSTLOCK(surface))
         SDL_UnlockSurface(surface);
-
-    // Now blit the surface
-    update_window_part(&dstrect);
 }
 
 //
@@ -301,18 +280,22 @@ void palette::load()
     if(ncolors > 256)
         ncolors = 256;
 
+#ifdef WIN32
+	// FIXME: Really, this applies to anything that doesn't allow dynamic stack allocation
+	SDL_Color colors[256];
+#else
     SDL_Color colors[ncolors];
+#endif
     for(int ii = 0; ii < ncolors; ii++)
     {
         colors[ii].r = red(ii);
         colors[ii].g = green(ii);
         colors[ii].b = blue(ii);
+        colors[ii].a = 255;
     }
-
     SDL_SetPaletteColors(surface->format->palette, colors, 0, ncolors);
 
     // Now redraw the surface
-    update_window_part(NULL);
     update_window_done();
 }
 
@@ -328,35 +311,11 @@ void palette::load_nice()
 
 void update_window_done()
 {
-    // opengl blit complete surface to window
-    
-    // convert color-indexed surface to RGBA surface
-    SDL_BlitSurface(surface, NULL, rgba_surface, NULL);
-
-    SDL_UpdateTexture(texture, NULL, rgba_surface->pixels, rgba_surface->pitch);
-    
+    // Convert to match the OpenGL texture
+    SDL_BlitSurface(surface, NULL, screen, NULL);
+    // Copy over to the OpenGL texture
+    SDL_UpdateTexture(texture, NULL, screen->pixels, screen->pitch);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
-}
-
-static void update_window_part(SDL_Rect *rect)
-{
-    // no partial blit's in case of opengl
-    // complete blit + scaling just before flip
-    return;
-
-#if 0
-    SDL_BlitSurface(surface, rect, window, rect);
-
-    // no window update needed until end of run
-    if(flags.doublebuf)
-        return;
-
-    // update window part for single buffer
-    if(rect == NULL)
-        SDL_UpdateRect(window, 0, 0, 0, 0);
-    else
-        SDL_UpdateRect(window, rect->x, rect->y, rect->w, rect->h);
-#endif
 }
