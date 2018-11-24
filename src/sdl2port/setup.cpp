@@ -444,7 +444,11 @@ void setup( int argc, char **argv )
 #ifdef __APPLE__
     UInt8 buffer[255];
     CFURLRef bundleurl = CFBundleCopyBundleURL(CFBundleGetMainBundle());
+#if 0
     CFURLRef url = CFURLCreateCopyAppendingPathComponent(kCFAllocatorDefault, bundleurl, CFSTR("Contents/Resources/data"), true);
+#else
+    CFURLRef url = CFURLCreateCopyAppendingPathComponent(kCFAllocatorDefault, bundleurl, CFSTR("../../data"), true);
+#endif
 
     if (!CFURLGetFileSystemRepresentation(url, true, buffer, 255))
     {
